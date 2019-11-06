@@ -43,12 +43,16 @@ use SwagBackendOrder\Components\PriceCalculation\Struct\RequestStruct;
 use SwagBackendOrder\Components\PriceCalculation\TaxCalculation;
 use SwagBackendOrder\Components\Translation\PaymentTranslator;
 use SwagBackendOrder\Components\Translation\ShippingTranslator;
-
-class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers_Backend_ExtJs
+use Shopware\Components\CSRFWhitelistAware;
+class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers_Backend_ExtJs implements CSRFWhitelistAware
 {
     /**
      * Return a list of customer on search or return a single customer on select.
      */
+    public function postDispatch() {
+        //$csrfToken = $this->container->get('BackendSession')->offsetGet('X-CSRF-Token');
+        //$this->View()->assign([ 'csrfToken' => $csrfToken ]);
+    }
     public function getCustomerAction()
     {
         /** @var CustomerRepository $repository */
@@ -75,9 +79,116 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
             'success' => true,
         ]);
     }
+    public function loadCartAction(){
+        $reqs = $this->Request()->getParams();
+		
+		$userId = isset($reqs['userid'])?$reqs['userid']:'';
+		
+		try {
+			$positions = Shopware()->Container()->get('dbal_connection')->createQueryBuilder()
+            ->select(['basket.id', 'basket.articleID', 'basket.articleName', 'basket.quantity', 'basket.price'])
+            ->from('s_order_basket', 'basket')
+            ->where('userID = :userId')
+            ->setParameter('userId', $userId)
+            ->execute()
+            ->fetchAll(\PDO::FETCH_ASSOC);
+		} catch (Exception $ex) {
+			echo json_encode(array('success'=>false, 'violations'=>$ex->getMessage()));
+			return;
+		}
+		
+		$totalCost = 0;
+		foreach ($positions as $key=>$value) {
+			$positions[$key]['create_backend_order_id'] = 0;
+			$positions[$key]['mode'] = 0;
+			$positions[$key]['articleId'] = $positions[$key]['articleID'];
+			$positions[$key]['detailId'] = 0;
+			$positions[$key]['articleNumber'] = $positions[$key]['ordernumber'];
+			$positions[$key]['statusId'] = 0;
+			$positions[$key]['statusDescription'] = 0;
+			$positions[$key]['taxId'] = 1;
+			$positions[$key]['taxRate'] = 19;
+			$positions[$key]['taxDescription'] = '';
+			$positions[$key]['inStock'] = 4;
+			$positions[$key]['discountType'] = 0;
+			$positions[$key]['isDiscount'] = false;
+			$positions[$key]['total'] = $positions[$key]['quantity']*$positions[$key]['price'];
+			$totalCost += $positions[$key]['quantity']*$positions[$key]['price'];
+		}
+		
+		$result = array();
+		$result['shippingCosts'] = 0;
+		$result['shippingCostsNet'] = 0;
+		$result['displayNet'] = 0;
+		$result['oldCurrencyId'] = 0;
+		$result['dispatchId'] = 0;
+		$result['taxFree'] = false;
+		$result['previousDisplayNet'] = false;
+		$result['previousTaxFree'] = false;
+		$result['previousDispatchTaxRate'] = 0;
+		$result['positions'] = $positions;
+		$result['userId'] = $userId;
+		$result['total'] = $totalCost;
+		
+		echo json_encode(array('success'=>true, 'result'=>$result));
+    	exit;
+    }
+
+    private function _saveShippingAddress($params)
+    {
+        if (
+            !empty($params['data']['orderAttribute'][0]['country']) &&
+            !empty($params['data']['shippingAttribute'][0]['postalcode']) &&
+            !empty($params['data']['shippingAttribute'][0]['city'])
+        ) {
+
+            $userId = $params['data']['customerId'];
+
+            try {
+                $qb = Shopware()->Container()->get('dbal_connection')->createQueryBuilder();
+                $res = $qb->insert('s_user_addresses')
+                ->setValue('user_id', ':user_id')
+                ->setValue('company', ':company')
+                ->setValue('title', ':title')
+                ->setValue('salutation', ':salutation')
+                ->setValue('firstname', ':firstname')
+                ->setValue('lastname', ':lastname')
+                ->setValue('street', ':street')
+                ->setValue('zipcode', ':zipcode')
+                ->setValue('city', ':city')
+                ->setValue('country_id', ':country_id')
+                ->setValue('additional_address_line1', ':additional_address_line1')
+                ->setValue('additional_address_line2', ':additional_address_line2')
+                ->setParameter(':user_id', $userId)
+                ->setParameter(':title', $params['data']['shippingAttribute'][0]['title'])
+                ->setParameter(':company', $params['data']['shippingAttribute'][0]['company'])
+                ->setParameter(':salutation', $params['data']['orderAttribute'][0]['salutation'])
+                ->setParameter(':firstname', $params['data']['shippingAttribute'][0]['firstname'])
+                ->setParameter(':lastname', $params['data']['shippingAttribute'][0]['lastname'])
+                ->setParameter(':street', $params['data']['shippingAttribute'][0]['street'])
+                ->setParameter(':zipcode', $params['data']['shippingAttribute'][0]['postalcode'])
+                ->setParameter(':city', $params['data']['shippingAttribute'][0]['city'])
+                ->setParameter(':country_id', $params['data']['orderAttribute'][0]['country'])
+                ->setParameter(':additional_address_line1', $params['data']['shippingAttribute'][0]['address1'])
+                ->setParameter(':additional_address_line2', $params['data']['shippingAttribute'][0]['address2'])
+                ->execute();
+
+                $params['data']['shippingAddressId'] = Shopware()->Db()->lastInsertId();
+
+            } catch (Exception $ex) {
+                // echo json_encode(array('success'=>false, 'violations'=>$ex->getMessage()));
+                // return;
+            }
+        }
+        return $params;
+    }
 
     public function createOrderAction()
     {
+        $adminIdentity = Shopware()->Container()->get('Auth')->getIdentity();
+        $params = $this->Request()->getParams();
+        $params = $this->_saveShippingAddress($params);
+
         /** @var ModelManager $modelManager */
         $modelManager = $this->get('models');
 
@@ -87,7 +198,7 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
         /** @var OrderValidator $orderValidator */
         $orderValidator = $this->get('swag_backend_order.order.order_validator');
 
-        $orderStruct = $orderHydrator->hydrateFromRequest($this->Request());
+        $orderStruct = $orderHydrator->hydrateFromRequest($this->Request(), $params['data']['shippingAddressId']);
         $violations = $orderValidator->validate($orderStruct);
         if ($violations->getMessages()) {
             $this->view->assign([
@@ -112,7 +223,7 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
 
             $modelManager->getConnection()->commit();
 
-            $this->sendOrderConfirmationMail($order);
+            $this->sendOrderConfirmationMail($order, $params, $adminIdentity);
         } catch (InvalidOrderException $e) {
             $modelManager->getConnection()->rollBack();
 
@@ -133,6 +244,27 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
             return;
         }
 
+        if (isset($params['data']['orderAttribute'][0]['scha1_orderfield1'])) {
+            
+            $orderId = $order->getId();
+            $params = $params['data']['orderAttribute'][0];
+
+            try {
+                $qb = Shopware()->Container()->get('dbal_connection')->createQueryBuilder();
+                $q = $qb->update('s_order_attributes')
+                ->set('scha1_orderfield1', $qb->expr()->literal($params['scha1_orderfield1']))
+                ->set('scha1_orderfield2', $qb->expr()->literal($params['scha1_orderfield2']))
+                ->set('scha1_orderfield3', $qb->expr()->literal($params['scha1_orderfield3']))
+                ->set('scha1_orderfield4', $qb->expr()->literal($params['scha1_orderfield4']))
+                ->set('deliverydate_date', $qb->expr()->literal($params['deliverydate_date']))
+                ->where('orderID = :id')
+                ->setParameter(':id', $orderId)
+                ->execute();
+            } catch (\Exception $e) {
+               //  echo $e->getMessage();
+            }
+        }
+
         $this->view->assign([
             'success' => true,
             'orderId' => $order->getId(),
@@ -145,10 +277,81 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
         $limit = $this->request->getParam('limit');
         $offset = $this->request->getParam('start');
         $search = $this->request->getParam('query');
+        $userId = $this->request->getParam('userid');
         $shopId = $this->getShopId();
-
+        
         $productSearch = $this->container->get('swag_backend_order.product_search');
         $result = $productSearch->findProducts($search, $shopId, $limit, $offset);
+        
+        if (is_numeric($userId)) {
+        	$user = [];
+			$customerGroup = [];
+			$customerGroupId = 0;
+			
+			try {
+				$user = Shopware()->Container()->get('dbal_connection')->createQueryBuilder()
+	            ->select(['u.customergroup'])
+	            ->from('s_user', 'u')
+	            ->where('id = :userId')
+	            ->setParameter('userId', $userId)
+	            ->execute()
+	            ->fetchAll(\PDO::FETCH_ASSOC);
+			} catch (Exception $ex) {
+				echo json_encode(array('success'=>false, 'violations'=>$ex->getMessage()));
+				return;
+			}
+			
+			if (count($user)>0) {
+				try {
+					$customerGroup = Shopware()->Container()->get('dbal_connection')->createQueryBuilder()
+		            ->select(['u.id'])
+		            ->from('s_core_customergroups', 'u')
+		            ->where('groupkey = :groupkey')
+		            ->setParameter('groupkey', $user[0]['customergroup'])
+		            ->execute()
+		            ->fetchAll(\PDO::FETCH_ASSOC);
+				} catch (Exception $ex) {
+					echo json_encode(array('success'=>false, 'violations'=>$ex->getMessage()));
+					return;
+				}
+			}
+			
+			if (count($customerGroup)>0) {
+				$customerGroupId = $customerGroup[0]['id'];
+			}
+			
+			$resultNew = [];
+			foreach ($result as $key => $value) {
+				
+				$articleID = $value['id'];
+				
+				if ($customerGroupId>0) {
+					
+					$articleCheck = [];
+					
+					try {
+						$articleCheck = Shopware()->Container()->get('dbal_connection')->createQueryBuilder()
+			            ->select(['u.articleID'])
+			            ->from('s_articles_avoid_customergroups', 'u')
+			            ->where('articleID = :articleID and customergroupID = :customergroupID')
+			            ->setParameter('articleID', $articleID)
+			            ->setParameter('customergroupID', $customerGroupId)
+			            ->execute()
+			            ->fetchAll(\PDO::FETCH_ASSOC);
+					} catch (Exception $ex) {
+						echo json_encode(array('success'=>false, 'violations'=>$ex->getMessage()));
+						return;
+					}
+					
+					// If this article is not blocked
+					if (count($articleCheck)==0) {
+						$resultNew[] = $value;
+					}
+				}
+			}
+			
+			$result = $resultNew;
+		}
 
         $this->view->assign(
             [
@@ -206,6 +409,40 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
             'success' => true,
         ]);
     }
+	
+	public function getCustomerGroupsAction()
+    {
+        $customerGroups = [];
+        
+        try {
+
+            $sql = 'SET group_concat_max_len=100000000';
+            Shopware()->Container()->get('dbal_connection')->exec($sql);
+
+            $customerGroups = Shopware()->Container()->get('dbal_connection')->createQueryBuilder('s_core_customergroups')
+            ->select(['CONCAT(am.description, " [", am.groupkey, "] (", count(o.id), ")") as `name`', 'group_concat(CONCAT("{\"id\":\"", o.id, "\", \"name\":\"", o.firstname, " ", o.lastname, "\"}") separator \',\') as `id`'])
+            ->from('s_core_customergroups', 'am')
+            ->innerJoin('am', 's_user', 'o', 'am.groupkey = o.customergroup')
+            ->innerJoin('o', 's_user_attributes', 'ua', 'ua.userID = o.id')
+            ->where('ua.exclude is null or ua.exclude = 0')
+            ->groupBy('am.id')
+            ->execute()
+            ->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (Exception $ex) {
+            echo $ex->getMessage();
+        }
+
+        $total = count($customerGroups);
+
+        $this->view->assign(
+            [
+                'data' => $customerGroups,
+                'total' => $total,
+                'success' => true,
+            ]
+        );
+    }
+
 
     /**
      * gets all available payments for the backend order
@@ -495,7 +732,7 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
     /**
      * @param Order $orderModel
      */
-    private function sendOrderConfirmationMail($orderModel)
+    private function sendOrderConfirmationMail($orderModel, $params=null, $adminIdentity=[])
     {
         $confirmationMailCreator = new ConfirmationMailCreator(
             new TaxCalculation(),
@@ -510,6 +747,34 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
 
         try {
             $context = $confirmationMailCreator->prepareOrderConfirmationMailData($orderModel);
+            $customerModel = $orderModel->getCustomer();
+            $customerId = $customerModel->getId();
+            $context['delivery_date'] = '';
+
+            $orderFromBackend = isset($params['data']['orderFromBackend']) ? $params['data']['orderFromBackend'] : '1';
+            $context['orderFromBackend'] = $orderFromBackend;
+            $context['backendAdmin'] = $adminIdentity->name;
+
+            $customerData = Shopware()->Container()->get('dbal_connection')->createQueryBuilder()
+            ->select(['u.firstname', 'u.lastname'])
+            ->from('s_user', 'u')
+            ->where('id = :customer_id')
+            ->setParameter('customer_id', $customerId)
+            ->execute()
+            ->fetchAll(\PDO::FETCH_ASSOC);
+            
+            if (isset($params['data']['orderAttribute'][0]['deliverydate_date'])) {
+                $context['delivery_date'] = $params['data']['orderAttribute'][0]['deliverydate_date'];
+                $context['scha1_orderfield1'] = $params['data']['orderAttribute'][0]['scha1_orderfield1'];
+                $context['scha1_orderfield2'] = $params['data']['orderAttribute'][0]['scha1_orderfield2'];
+                $context['scha1_orderfield3'] = $params['data']['orderAttribute'][0]['scha1_orderfield3'];
+                $context['scha1_orderfield4'] = $params['data']['orderAttribute'][0]['scha1_orderfield4'];
+            }
+
+            if (count($customerData)>0) {
+                $context['customer_name'] = $customerData[0]['firstname'].' '.$customerData[0]['lastname'];
+            }
+
             $context['sOrderDetails'] = $confirmationMailCreator->prepareOrderDetailsConfirmationMailData(
                 $orderModel,
                 $orderModel->getLanguageSubShop()->getLocale()
@@ -526,6 +791,42 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
                 $mail->addTo(Shopware()->Config()->get('mail'));
                 $mail->send();
             }
+
+            $data = '';
+        
+            try {
+                $data = Shopware()->Container()->get('dbal_connection')->createQueryBuilder('webnativ_einstellungen')->select(['c.email'])
+                ->from('webnativ_einstellungen', 'c')
+                ->execute()
+                ->fetchAll(\PDO::FETCH_ASSOC);
+
+                if (isset($data[0])) {
+                    $data = $data[0]['email'];
+                }
+            } catch (Exception $ex) {
+            }
+
+            if ($data != '') {
+                
+                $mail->clearRecipients();
+                $data = explode(',', $data);
+
+                foreach ($data as $email_string) {
+                    $name = 'admin';
+                    $email = $email_string;
+                    if (strpos($email_string, '<') !== false) {
+                        $split = explode('<', $email_string);
+                        $name = $split[0];
+                        $email = rtrim($split[1], '>');
+                    }
+                    
+                    if ($context['additional']['user']['email'] != $email) {
+                        $mail->AddAddress($email, $name);
+                    }
+                }
+                $mail->Send();
+            }
+
         } catch (\Exception $e) {
             $this->view->assign('mail', $e->getMessage());
         }
@@ -766,5 +1067,8 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
         }
 
         return $customerGroupKey;
+    }
+    public function getWhitelistedCSRFActions() {
+        return ['loadCart', 'createOrder'];
     }
 }

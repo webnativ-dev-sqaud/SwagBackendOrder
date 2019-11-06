@@ -30,7 +30,7 @@ class OrderHydrator
      *
      * @return OrderStruct
      */
-    public function hydrateFromRequest(\Enlight_Controller_Request_Request $request)
+    public function hydrateFromRequest(\Enlight_Controller_Request_Request $request, $shippingAddressId=false)
     {
         $data = $request->getParams();
         $data = $data['data'];
@@ -38,11 +38,29 @@ class OrderHydrator
         $orderStruct = new OrderStruct();
 
         $orderStruct->setCustomerId((int) $data['customerId']);
-        $orderStruct->setBillingAddressId((int) $data['billingAddressId']);
+		
+		if (empty($data['billingAddressId']) || $data['billingAddressId']==0) {
+            $userDataAddress = Shopware()->Container()->get('dbal_connection')->createQueryBuilder('s_user')
+            ->select(['u.default_billing_address_id', 'u.default_shipping_address_id', 'u.language'])
+            ->from('s_user', 'u')
+            ->where('u.id= :userId')
+            ->setParameter('userId', $data['customerId'])
+            ->execute()
+            ->fetch(\PDO::FETCH_ASSOC);
+
+            $data['billingAddressId'] = $userDataAddress['default_billing_address_id'];
+            $data['languageShopId'] = $userDataAddress['language'];
+        }
+		
+		$orderStruct->setBillingAddressId((int) $data['billingAddressId']);
 
         $orderStruct->setShippingAddressId($data['billingAddressId']);
         if ($data['shippingAddressId']) {
             $orderStruct->setShippingAddressId($data['shippingAddressId']);
+        }
+
+        if ($shippingAddressId>0) {
+            $orderStruct->setShippingAddressId($shippingAddressId);
         }
 
         $orderStruct->setPaymentId((int) $data['paymentId']);

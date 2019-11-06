@@ -11,7 +11,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.CustomerInformation.Shippin
 
     bodyPadding: 10,
 
-    flex: 1,
+    flex: 2,
 
     autoScroll: true,
 
@@ -23,6 +23,19 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.CustomerInformation.Shippin
         salutation: {
             mister: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/salutation/mister"}Mr{/s}',
             miss: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/salutation/miss"}Ms{/s}'
+        },
+        shippingInformation: {
+            salutationLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/salutation/label"}Anrede{/s}',
+            titelLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/Titel/label"}Titel{/s}',
+            firmaLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/Firma/label"}Firma{/s}',
+            firstNameLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/firstname/label"}Vorname{/s}',
+            lastNameLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/lastname/label"}Nachname*{/s}',
+            streetLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/street/label"}Straße{/s}',
+            address1Label: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/address1/label"}Adresszustz 1{/s}',
+            address2Label: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/address2/label"}Adresszustz 2{/s}',
+            postalcodeLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/postalcode/label"}Postleizahl*{/s}',
+            cityLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/city/label"}Stadt*{/s}',
+            countryLabel: '{s namespace="backend/swag_backend_order/view/customer_information" name="swag_backend_order/customer_information/country/label"}Land*{/s}'
         }
     },
 
@@ -91,6 +104,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.CustomerInformation.Shippin
             listConfig: {
                 maxHeight: 200
             },
+            width: 250,
             tpl: me.createShippingAddressComboTpl(),
             listeners: {
                 'change': function (comboBox, value) {
@@ -135,6 +149,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.CustomerInformation.Shippin
             uncheckedValue: false,
             checked: true,
             height: 35,
+            width: 250,
             listeners: {
                 change: function (field, value) {
                     if (value) {
@@ -147,7 +162,252 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.CustomerInformation.Shippin
             }
         });
 
-        return [me.shippingAddressComboBox, me.billingAsShippingCheckbox];
+        var salutations = Ext.create('Ext.data.Store', {
+            fields : ['abbr', 'name'],
+            data : [
+                { "abbr": "mr", "name": "Herr" },
+                { "abbr": "ms", "name": "Frau" }
+            ]
+        });
+
+        var countries = Ext.create('Ext.data.Store', {
+            fields : ['abbr', 'name'],
+            data : [
+                { "abbr": "2", "name": "Deutschland" }
+            ]
+        });
+
+        var salutationTxtBox = Ext.create('Ext.form.field.ComboBox', {
+            name: 'salutationTxtBox',
+            queryMode: 'local',
+            store: salutations,
+            flex: 1,
+            width: 400,
+            listConfig: {
+                maxHeight: 200
+            },
+            allowBlank: true,
+            valueField: 'abbr',
+            fieldLabel: me.snippets.shippingInformation.salutationLabel,
+            tpl: me.createSalutationCountryComboTpl(0),
+            displayTpl: me.createSalutationCountryComboTpl(1),
+            listeners: {
+                'change': function (comboBox, record) {
+                    me.fireEvent('changeShippingFieldDP', comboBox, record);
+                }
+            }
+        });
+
+        var countryTxtBox = Ext.create('Ext.form.field.ComboBox', {
+            name: 'countryTxtBox',
+            queryMode: 'local',
+            store: countries,
+            flex: 1,
+            width: 400,
+            listConfig: {
+                maxHeight: 200
+            },
+            allowBlank: true,
+            valueField: 'abbr',
+            fieldLabel: me.snippets.shippingInformation.countryLabel,
+            tpl: me.createSalutationCountryComboTpl(0),
+            displayTpl: me.createSalutationCountryComboTpl(1),
+            listeners: {
+                'change': function (comboBox, record) {
+                    me.fireEvent('changeShippingFieldDP', comboBox, record);
+                }
+            }
+        });
+
+        var titleTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'titleTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.titelLabel,
+            maxLength: 30,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var firmaTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'firmaTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.firmaLabel,
+            maxLength: 30,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var firstNameTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'firstNameTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.firstNameLabel,
+            maxLength: 30,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var lastNameTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'lastNameTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.lastNameLabel,
+            maxLength: 30,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var streetTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'streetTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.streetLabel,
+            maxLength: 30,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var address1TxtBox = Ext.create('Ext.form.TextField', {
+            name: 'address1TxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.address1Label,
+            maxLength: 255,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var address2TxtBox = Ext.create('Ext.form.TextField', {
+            name: 'address2TxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.address2Label,
+            maxLength: 255,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var postalCodeTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'postalCodeTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.postalcodeLabel,
+            maxLength: 10,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var cityTxtBox = Ext.create('Ext.form.TextField', {
+            name: 'cityTxtBox',
+            width: 400,
+            fieldLabel: me.snippets.shippingInformation.cityLabel,
+            maxLength: 25,
+            enforceMaxLength: true,
+            listeners: {
+                change: function (field, newValue, oldValue, eOpts) {
+                    me.fireEvent('changeShippingField', field, newValue, oldValue);
+                }
+            }
+        });
+
+        var shippingInformationContainer = Ext.create('Ext.Container', {
+            name: 'additionalInformationContainer',
+            width: 400,
+            height: 'auto',
+            items: [
+                salutationTxtBox,
+                titleTxtBox,
+                firmaTxtBox,
+                firstNameTxtBox,
+                lastNameTxtBox,
+                streetTxtBox,
+                address1TxtBox,
+                address2TxtBox,
+                postalCodeTxtBox,
+                cityTxtBox,
+                countryTxtBox
+            ]
+        });
+
+        var shippingAddressBoxContainer = Ext.create('Ext.Container', {
+            name: 'additionalInformationContainer',
+            width: 400,
+            height: 'auto',
+            items: [
+                me.shippingAddressComboBox,
+                me.billingAsShippingCheckbox
+            ]
+        });
+
+        me.shippingAddressBox = Ext.create('Ext.container.Container', {
+            layout: 'hbox',
+            flex: 2,
+            title: 'right',
+            padding: '10 0 0 10',
+            autoHeight: true,
+            items: [
+                shippingAddressBoxContainer
+            ]
+        });
+
+        me.shippingInformationContainerParent = Ext.create('Ext.container.Container', {
+            layout: 'hbox',
+            flex: 3,
+            title: 'left',
+            padding: '10 0 0 10',
+            autoHeight: true,
+            items: [
+                shippingInformationContainer
+            ]
+        });
+
+        return [me.shippingInformationContainerParent, me.shippingAddressBox];
+    },
+
+    createSalutationCountryComboTpl: function (temp) {
+        var me = this;
+
+        if (temp === 0) {
+            return new Ext.XTemplate(
+                '{literal}<tpl for=".">',
+                '<div class= "x-combo-list-item x-boundlist-item">',
+                '{name}',
+                '</div>',
+                '</tpl>{/literal}'
+            );
+        } else {
+            return new Ext.XTemplate(
+                '{literal}<tpl for=".">',
+                    '{name}',
+                '</tpl>{/literal}'
+            );
+        }
     },
 
     createShippingAddressComboTpl: function () {

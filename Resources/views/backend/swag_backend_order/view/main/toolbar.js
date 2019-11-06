@@ -162,6 +162,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.Toolbar', {
 
         me.changeCurrencyComboBox = Ext.create('Ext.form.field.ComboBox', {
             fieldLabel: me.snippets.currencyLabel,
+            labelWidth: 105,
             stores: me.currencyStore,
             queryMode: 'local',
             displayField: 'currency',
@@ -178,7 +179,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.Toolbar', {
 
         return [
             me.changeCurrencyComboBox, me.languageComboBox, me.shopLabel, '->',
-            me.createCustomerButton, me.createGuestButton, me.openCustomerButton, me.customerSearchField
+            /* me.createCustomerButton, me.createGuestButton, */ me.openCustomerButton, me.customerSearchField
         ];
     },
 

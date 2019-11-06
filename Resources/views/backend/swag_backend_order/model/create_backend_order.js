@@ -11,7 +11,8 @@ Ext.define('Shopware.apps.SwagBackendOrder.model.CreateBackendOrder', {
 
     requires: [
         'Shopware.apps.SwagBackendOrder.model.Position',
-        'Shopware.apps.SwagBackendOrder.model.OrderAttribute'
+        'Shopware.apps.SwagBackendOrder.model.OrderAttribute',
+        'Shopware.apps.SwagBackendOrder.model.ShippingAttribute'
     ],
 
     fields: [
@@ -42,6 +43,11 @@ Ext.define('Shopware.apps.SwagBackendOrder.model.CreateBackendOrder', {
             name: 'orderAttribute',
             model: 'Shopware.apps.SwagBackendOrder.model.OrderAttribute',
             associationKey: 'orderAttribute'
+        },
+        {
+            name: 'shippingAttribute',
+            model: 'Shopware.apps.SwagBackendOrder.model.ShippingAttribute',
+            associationKey: 'shippingAttribute'
         }
     ],
 

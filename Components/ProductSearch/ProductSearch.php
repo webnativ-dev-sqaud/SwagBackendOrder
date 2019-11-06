@@ -281,6 +281,7 @@ class ProductSearch implements ProductSearchInterface
         $queryBuilder = $this->connection->createQueryBuilder();
 
         return $queryBuilder->select([
+            'article.id',
             'article.name',
             'article.active AS articleActive',
             'details.ordernumber AS number',

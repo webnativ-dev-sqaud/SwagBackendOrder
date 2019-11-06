@@ -25,13 +25,23 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
         error: {
             customer: '{s name="swagbackendorder/error/customer"}{/s}',
             billing: '{s name="swagbackendorder/error/billing"}{/s}',
+            shipping: '{s name="swagbackendorder/error/shipping"}Please provide shipping details.{/s}',
             payment: '{s name="swagbackendorder/error/payment"}{/s}',
             shippingArt: '{s name="swagbackendorder/error/shipping_art"}{/s}',
             positions: '{s name="swagbackendorder/error/positions"}{/s}',
             instanceText: '{s name="swagbackendorder/error/instanceText"}{/s}',
             instanceTitle: '{s name="swagbackendorder/error/instanceTitle"}{/s}',
             title: '{s name="swagbackendorder/error/title"}{/s}',
-            mailTitle: '{s name="swagbackendorder/error/mail_title"}{/s}'
+            mailTitle: '{s name="swagbackendorder/error/mail_title"}{/s}',
+            scha1_orderfield1: '{s name="swagbackendorder/error/scha1_orderfield1"}Bitte eingeben Zusatzfeld Anschrift{/s}',
+            scha1_orderfield2: '{s name="swagbackendorder/error/scha1_orderfield2"}Bitte eingeben Referenz{/s}',
+            deliverydate_date: '{s name="swagbackendorder/error/deliverydate_date"}Das Datum muss im Format "DD.MM.JJJJ" sein.{/s}',
+            scha1_orderfield3: '{s name="swagbackendorder/error/scha1_orderfield3"}Bitte eingeben Zusatzfeld Auftragsart{/s}',
+            scha1_orderfield4: '{s name="swagbackendorder/error/scha1_orderfield4"}Bitte eingeben Zusatzfeld Adressgruppe{/s}',
+            lastname: '{s name="swagbackendorder/error/shipping/lastname"}Bitte geben Sie den Nachnamen ein.{/s}',
+            postalcode: '{s name="swagbackendorder/error/shipping/postalcode"}Bitte geben Sie die Postleitzahl ein.{/s}',
+            city: '{s name="swagbackendorder/error/shipping/city"}Bitte geben Sie die Stadt ein.{/s}',
+            country: '{s name="swagbackendorder/error/shipping/country"}Bitte wählen Sie ein Land aus.{/s}'
         },
         success: {
             text: '{s name="swagbackendorder/success/text"}{/s}',
@@ -65,6 +75,13 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
      */
     init: function () {
         var me = this;
+		
+		 setInterval(function() {
+			if (updateCartResult) {
+				updateCartResult = false;
+				me.onUpdateCart(cartData);
+			}
+		}, 500);
 
         me.previousOrderModel = Ext.create('Shopware.apps.SwagBackendOrder.model.CreateBackendOrder');
         me.previousOrderModel.set('taxFree', false);
@@ -84,14 +101,19 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
             'createbackendorder-customer-shipping': {
                 selectShippingAddress: me.onSelectShippingAddress,
                 selectBillingAsShippingAddress: me.onSelectBillingAsShippingAddress,
-                calculateBasket: me.onCalculateBasket
+                calculateBasket: me.onCalculateBasket,
+                changeShippingField: me.onChangeShippingField,
+                changeShippingFieldDP: me.onChangeShippingFieldDP
             },
             'createbackendorder-customer-payment': {
                 selectPayment: me.onSelectPayment
             },
             'createbackendorder-additional': {
                 changeAttrField: me.onChangeAttrField,
-                changeDesktopType: me.onChangeDesktopType
+                changeDesktopType: me.onChangeDesktopType,
+                changeDD: me.onChangeDD,
+				selectCustomerGroup: me.onSelectCustomerGroup,
+                selectCustomers: me.onSelectCustomers
             },
             'createbackendorder-customersearch': {
                 selectCustomer: me.onSelectCustomer
@@ -136,6 +158,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
          */
         me.orderModel = Ext.create('Shopware.apps.SwagBackendOrder.model.CreateBackendOrder', {});
         me.orderAttributeModel = Ext.create('Shopware.apps.SwagBackendOrder.model.OrderAttribute', {});
+        me.shippingAttributeModel = Ext.create('Shopware.apps.SwagBackendOrder.model.ShippingAttribute', {});
         me.createBackendOrderStore = me.subApplication.getStore('CreateBackendOrder');
         me.orderModel.set('currencyFactor', 1);
 
@@ -225,6 +248,138 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
 
         me.onCalculateBasket();
     },
+	
+	recursivePlaceOrder: function(index, hasMany) {
+        var me = this;
+        var isLast = false;
+        if (hasMany.length === index+1) {
+            isLast = true;
+        }
+        
+        me.orderModel.set('customerId', hasMany[index]);
+        
+        Shopware.Notification.createGrowlMessage('Bestellung', 'Auftragserteilung für Kundennummer '+hasMany[index]);
+
+         /* var jsonDataTemp = Object.assign( {}, me.orderModel.getData(), me.orderModel.getAssociatedData()); */
+
+        var objs = [me.orderModel.getData(),  me.orderModel.getAssociatedData()],
+        jsonDataTemp =  objs.reduce(function (r, o) {
+            Object.keys(o).forEach(function (k) {
+                r[k] = o[k];
+            });
+            return r;
+        }, {});
+
+        var jsonData = {};
+        var headersData = {};
+        jsonData.data = jsonDataTemp;
+        headersData['Content-Type'] = 'application/json';
+
+        Ext.Ajax.request({
+            url: '{url action="createOrder"}',
+            headers: headersData,
+            params: JSON.stringify(jsonData),
+            failure: function (response) {
+                var violations = response.proxy.reader.rawData.violations,
+                    message = '';
+
+                Ext.Array.forEach(violations, function (item) {
+                    message += item + '<br />';
+                });
+
+                Shopware.Notification.createGrowlMessage(me.snippets.error.title, message);
+                me.window.enable(true);
+            },
+            success: function (response) {
+                var rawData = JSON.parse(response.responseText)
+                
+                if (rawData && rawData.ordernumber) {
+                    Shopware.Notification.createGrowlMessage('Bestellung', 'Bestellung unter der Bestellnummer '+rawData.ordernumber);
+                    if (isLast) {
+                        me.orderId = rawData.orderId;
+                        me.ordernumber = rawData.ordernumber;
+                        me.mailErrorMessage = rawData.mail;
+
+                        var orderManager = Ext.ComponentQuery.query('order-list-main-window');
+
+                        switch (me.modus) {
+                            case 'new':
+                                me.window.close();
+
+                                if (Ext.isDefined(orderManager[0])) {
+                                    var store = orderManager[0].listStore;
+                                    store.getProxy().extraParams.orderID = null;
+                                    store.load();
+                                }
+
+                                if (rawData.mail) {
+                                    Shopware.Notification.createGrowlMessage(me.snippets.error.mailTitle, me.mailErrorMessage);
+                                }
+                                Shopware.Notification.createGrowlMessage(me.snippets.success.title, me.snippets.success.text + me.ordernumber);
+
+                                Shopware.app.Application.addSubApplication({
+                                    name: 'Shopware.apps.SwagBackendOrder',
+                                    action: 'detail'
+                                });
+                                break;
+                            case 'close':
+                                me.window.close();
+
+                                if (Ext.isDefined(orderManager[0])) {
+                                    var store = orderManager[0].listStore;
+                                    store.getProxy().extraParams.orderID = null;
+                                    store.load();
+                                }
+
+                                break;
+                            case 'detail':
+                                if (me.orderId > 0) {
+                                    Shopware.app.Application.addSubApplication({
+                                        name: 'Shopware.apps.Order',
+                                        action: 'detail',
+                                        params: {
+                                            orderId: me.orderId
+                                        }
+                                    });
+                                }
+                                if (rawData.mail) {
+                                    Shopware.Notification.createGrowlMessage(me.snippets.error.mailTitle, me.mailErrorMessage);
+                                }
+                                Shopware.Notification.createGrowlMessage(me.snippets.success.title, me.snippets.success.text + ' - ' + me.ordernumber);
+                                me.window.close();
+
+                                if (Ext.isDefined(orderManager[0])) {
+                                    var store = orderManager[0].listStore;
+                                    store.getProxy().extraParams.orderID = null;
+                                    store.load();
+                                }
+
+                                break;
+                            default:
+                                break;
+                        }
+                    } else {
+                        index++;
+                        me.recursivePlaceOrder(index, hasMany);
+                    }
+                } else {
+                    Shopware.Notification.createGrowlMessage('Bestellung', 'Eine Bestellung kann nicht aufgegeben werden: '+response.responseText);
+
+                    if (isLast) {
+                        var orderManager = Ext.ComponentQuery.query('order-list-main-window');
+                        if (Ext.isDefined(orderManager[0])) {
+                            var store = orderManager[0].listStore;
+                            store.getProxy().extraParams.orderID = null;
+                            store.load();
+                        }
+                    } else {
+                        index++;
+                        me.recursivePlaceOrder(index, hasMany);
+                    }
+                }
+            }
+        });
+    },
 
     /**
      * creates the order
@@ -234,28 +389,88 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
             errmsg = '';
         me.modus = modus;
         me.window.disable(true);
+        var customers = me.orderModel.get('customers');
+		var customerGroups = me.orderModel.get('customerGroup');
+		var hasMany = [];
 
         /**
          * get the grid component for the position listing
          */
         me.positionsGrid = positionsGridContainer.getComponent('positionsGrid');
+		
+		if (me.orderModel.get('paymentId') == 0) {
+			errmsg += me.snippets.error.payment + '<br>';
+		}
+		
+		if (me.orderModel.get('dispatchId') == 0) {
+			errmsg += me.snippets.error.shippingArt + '<br>';
+		}
 
-        /**
-         * checks if all required fields were set
-         */
-        var customerStore = me.subApplication.getStore('Customer');
-        if (customerStore.count() > 0) {
-            if (me.orderModel.get('billingAddressId') == 0) {
-                errmsg += me.snippets.error.billing + '<br>';
+        var customerGroupsCopy;
+
+        if (customerGroups) {
+            customerGroupsCopy = customerGroups.slice();
+        }
+        
+        if (customerGroupsCopy && customerGroupsCopy.length>0) {
+            
+            if (customers && customers.length>0) {
+                for (var j=0; j<customers.length; j++) {
+                    for (var i=0; i<customerGroupsCopy.length; i++) {
+                        if (customerGroupsCopy[i] == customers[j]) {
+                            var index = customerGroupsCopy.indexOf(customerGroupsCopy[i]);
+                            customerGroupsCopy.splice(index, 1);
+                        }
+                    }
+                }
             }
-            if (me.orderModel.get('paymentId') == 0) {
-                errmsg += me.snippets.error.payment + '<br>';
-            }
-            if (me.orderModel.get('dispatchId') == 0) {
-                errmsg += me.snippets.error.shippingArt + '<br>';
-            }
+        }
+		
+		if (customerGroupsCopy && customerGroupsCopy.length>0) {
+            hasMany = customerGroupsCopy;
         } else {
-            errmsg += me.snippets.error.customer + '<br>';
+
+			/**
+			 * checks if all required fields were set
+			 */
+			var customerStore = me.subApplication.getStore('Customer');
+			if (customerStore.count() > 0) {
+				if (me.orderModel.get('billingAddressId') == 0) {
+					errmsg += me.snippets.error.billing + '<br>';
+				}
+			} else {
+				errmsg += me.snippets.error.customer + '<br>';
+			}
+		}
+
+        if (me.orderAttributeModel.get('scha1_orderfield3') == '') {
+            errmsg += me.snippets.error.scha1_orderfield3 + '<br>';
+        }
+
+        if (me.orderAttributeModel.get('scha1_orderfield4') == '') {
+            errmsg += me.snippets.error.scha1_orderfield4 + '<br>';
+        }
+
+        if (me.orderAttributeModel.get('deliverydate_date') != '' && !me.isValidDate(me.orderAttributeModel.get('deliverydate_date'))) {
+            errmsg += me.snippets.error.deliverydate_date + '<br>';
+        }
+
+        if (
+            me.shippingAttributeModel.get('postalcode') != '' || 
+            me.shippingAttributeModel.get('city') != '' || 
+            me.orderAttributeModel.get('country') != ''
+        ) {
+            if (me.shippingAttributeModel.get('postalcode') == '') {
+                errmsg += me.snippets.error.postalcode + '<br>';
+            }
+
+            if (me.shippingAttributeModel.get('city') == '') {
+                errmsg += me.snippets.error.city + '<br>';
+            }
+
+            if (me.orderAttributeModel.get('country') == '') {
+                errmsg += me.snippets.error.country + '<br>';
+            }
         }
 
         var positionsStore = me.positionsGrid.getStore();
@@ -285,66 +500,27 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
         var orderAttributeStore = me.orderModel.orderAttribute();
         orderAttributeStore.add(me.orderAttributeModel);
 
+        var shippingAttributeStore = me.orderModel.shippingAttribute();
+        shippingAttributeStore.add(me.shippingAttributeModel);
+
         /**
          * sends the request to the php controller
          */
         me.orderModel.set('total', me.totalCostsModel.get('total'));
         me.orderModel.set('totalWithoutTax', me.totalCostsModel.get('totalWithoutTax'));
 
-        me.createBackendOrderStore.sync({
-            success: function (response) {
-                me.orderId = response.proxy.reader.rawData.orderId;
-                me.ordernumber = response.proxy.reader.rawData.ordernumber;
-                me.mailErrorMessage = response.proxy.reader.rawData.mail;
+        if (hasMany.length > 0) {
+            me.recursivePlaceOrder(0, hasMany)
+        } else {
+            me.recursivePlaceOrder(0, [me.orderModel.get('customerId')])
+        }
+    },
 
-                switch (me.modus) {
-                    case 'new':
-                        me.window.close();
-                        if (response.proxy.reader.rawData.mail) {
-                            Shopware.Notification.createGrowlMessage(me.snippets.error.mailTitle, me.mailErrorMessage);
-                        }
-                        Shopware.Notification.createGrowlMessage(me.snippets.success.title, me.snippets.success.text + me.ordernumber);
-
-                        Shopware.app.Application.addSubApplication({
-                            name: 'Shopware.apps.SwagBackendOrder',
-                            action: 'detail'
-                        });
-                        break;
-                    case 'close':
-                        me.window.close();
-                        break;
-                    case 'detail':
-                        if (me.orderId > 0) {
-                            Shopware.app.Application.addSubApplication({
-                                name: 'Shopware.apps.Order',
-                                action: 'detail',
-                                params: {
-                                    orderId: me.orderId
-                                }
-                            });
-                        }
-                        if (response.proxy.reader.rawData.mail) {
-                            Shopware.Notification.createGrowlMessage(me.snippets.error.mailTitle, me.mailErrorMessage);
-                        }
-                        Shopware.Notification.createGrowlMessage(me.snippets.success.title, me.snippets.success.text + ' - ' + me.ordernumber);
-                        me.window.close();
-                        break;
-                    default:
-                        break;
-                }
-            },
-            failure: function (response) {
-                var violations = response.proxy.reader.rawData.violations,
-                    message = '';
-
-                Ext.Array.forEach(violations, function (item) {
-                    message += item + '<br />';
-                });
-
-                Shopware.Notification.createGrowlMessage(me.snippets.error.title, message);
-                me.window.enable(true);
-            }
-        });
+    isValidDate: function (date) {
+        var temp = date.split('.');
+        if (temp.length === 3)
+        var d = new Date(temp[2] + '/' + temp[1] + '/' + temp[0]);
+        return (temp.length === 3 && d && (d.getMonth() + 1) == temp[1] && d.getDate() == Number(temp[0]) && d.getFullYear() == Number(temp[2]));
     },
 
     /**
@@ -417,6 +593,54 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
     onSelectPayment: function (record) {
         var me = this;
         me.orderModel.set('paymentId', record[0].data.id);
+    },
+	
+	onSelectCustomerGroup: function (comboBox, newValue) {
+        var me = this;
+        me.orderModel.set('customerGroup', newValue);
+    },
+
+    onSelectCustomers: function (comboBox, newValue) {
+        var me = this;
+        /* , customers = comboBox.findRecordByValue(newValue); */
+        me.orderModel.set('customers', comboBox.getValue());
+    },
+
+    /**
+     * fired when the user selects a payment
+     * sets the payment in the orderModel
+     *
+     * @param record
+     */
+    onChangeShippingFieldDP: function (combobox, record) {
+        var me = this;
+
+        switch (combobox.name) {
+            case 'salutationTxtBox':
+            me.orderAttributeModel.set('salutation', record);
+            break;
+
+            case 'countryTxtBox':
+            me.orderAttributeModel.set('country', record);
+            break;            
+        }
+
+        me.subApplication.getStore('OrderAttribute').add(me.orderAttributeModel);
+    },
+
+    onChangeDD: function (combobox, record) {
+        var me = this;
+
+        switch (combobox.name) {
+        case 'scha1_orderfield3TxtBox':
+            me.orderAttributeModel.set('scha1_orderfield3', record);
+            break;
+        case 'scha1_orderfield4TxtBox':
+            me.orderAttributeModel.set('scha1_orderfield4', record);
+            break;
+        }
+
+        me.subApplication.getStore('OrderAttribute').add(me.orderAttributeModel);
     },
 
     /**
@@ -665,6 +889,15 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
         var me = this;
 
         switch (field.name) {
+            case 'scha1_orderfield1TxtBox':
+                me.orderAttributeModel.set('scha1_orderfield1', field.getValue());
+                break;
+            case 'scha1_orderfield2TxtBox':
+                me.orderAttributeModel.set('scha1_orderfield2', field.getValue());
+                break;
+            case 'deliverydate_dateTxtBox':
+                me.orderAttributeModel.set('deliverydate_date', field.getValue());
+                break;
             case 'attr1TxtBox':
                 me.orderAttributeModel.set('attribute1', field.getValue());
                 break;
@@ -688,6 +921,49 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
         }
 
         me.subApplication.getStore('OrderAttribute').add(me.orderAttributeModel);
+    },
+
+    /**
+     * saves the attribute fields in the correct store field
+     *
+     * @param field
+     */
+    onChangeShippingField: function (field) {
+        var me = this;
+
+        switch (field.name) {
+            case 'titleTxtBox':
+                me.shippingAttributeModel.set('title', field.getValue());
+                break;
+            case 'firmaTxtBox':
+                me.shippingAttributeModel.set('company', field.getValue());
+                break;
+            case 'firstNameTxtBox':
+                me.shippingAttributeModel.set('firstname', field.getValue());
+                break;
+            case 'lastNameTxtBox':
+                me.shippingAttributeModel.set('lastname', field.getValue());
+                break;
+            case 'streetTxtBox':
+                me.shippingAttributeModel.set('street', field.getValue());
+                break;
+            case 'address1TxtBox':
+                me.shippingAttributeModel.set('address1', field.getValue());
+                break;
+            case 'address2TxtBox':
+                me.shippingAttributeModel.set('address2', field.getValue());
+                break;
+            case 'postalCodeTxtBox':
+                me.shippingAttributeModel.set('postalcode', field.getValue());
+                break;
+            case 'cityTxtBox':
+                me.shippingAttributeModel.set('city', field.getValue());
+                break;
+            default:
+                break;
+        }
+
+        me.subApplication.getStore('ShippingAttribute').add(me.shippingAttributeModel);
     },
 
     /**
@@ -729,6 +1005,93 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
         var me = this;
         me.orderModel.set('shippingAddressId', null);
     },
+	onUpdateCart: function (jsonData) {
+	
+		var me = this;
+
+        me.window.setLoading(true);
+        me.positionStore = jsonData.result.positions;
+        me.totalCostsStore = me.subApplication.getStore('TotalCosts');
+        me.totalCostsModel = me.totalCostsStore.getAt(0);
+
+        var positionJsonString = Ext.JSON.encode(jsonData.result.positions);
+
+        Ext.Ajax.request({
+            url: '{url action="calculateBasket"}',
+            params: {
+                positions: positionJsonString,
+                shippingCosts: jsonData.result.shippingCosts,
+                shippingCostsNet: jsonData.result.shippingCostsNet,
+                displayNet: jsonData.result.displayNet,
+                oldCurrencyId: jsonData.result.oldCurrencyId,
+                newCurrencyId: jsonData.result.oldCurrencyId,
+                dispatchId: jsonData.result.dispatchId,
+                taxFree: jsonData.result.taxFree,
+                previousDisplayNet: jsonData.result.previousDisplayNet,
+                previousTaxFree: jsonData.result.previousTaxFree,
+                previousDispatchTaxRate: jsonData.result.previousDispatchTaxRate
+            },
+            success: function (response) {
+                var totalCostsJson = Ext.JSON.decode(response.responseText),
+                    record = totalCostsJson.data,
+                    addDiscountButton = me.getPositionGrid().addDiscountButton,
+                    discountRecord = me.getDiscountRecord();
+
+                me.previousOrderModel.set('taxFree', me.orderModel.get('taxFree'));
+                me.previousOrderModel.set('displayNet', me.orderModel.get('displayNet'));
+                me.previousDispatchTaxRate = record.dispatchTaxRate;
+
+                me.orderModel.set('shippingCostsNet', record.shippingCostsNet);
+                me.orderModel.set('shippingCosts', record.shippingCosts);
+                // Update shipping costs fields
+                if (me.shippingCostsFields !== undefined) {
+                    me.shippingCostsFields[0].suspendEvents();
+                    me.shippingCostsFields[1].suspendEvents();
+                    me.shippingCostsFields[0].setValue(record.shippingCosts);
+                    me.shippingCostsFields[1].setValue(record.shippingCostsNet);
+                    me.shippingCostsFields[0].resumeEvents();
+                    me.shippingCostsFields[1].resumeEvents();
+                }
+
+                // Update position records
+                for (var i = 0; i < record.positions.length; i++) {
+                    var position = me.positionStore.getAt(i);
+                    if (!position) {
+                        continue;
+                    }
+                    position.suspendEvents();
+                    position.set('price', record.positions[i].price);
+                    position.set('total', record.positions[i].total);
+                    position.resumeEvents();
+                }
+
+                // Update total cost overview
+                me.totalCostsModel.beginEdit();
+                try {
+                    me.totalCostsModel.set('totalWithoutTax', record.totalWithoutTax);
+                    me.totalCostsModel.set('sum', record.sum);
+                    me.totalCostsModel.set('total', record.total);
+                    me.totalCostsModel.set('shippingCosts', record.shippingCosts);
+                    me.totalCostsModel.set('shippingCostsNet', record.shippingCostsNet);
+                    me.totalCostsModel.set('taxSum', record.taxSum);
+                } finally {
+                    me.totalCostsModel.endEdit();
+                }
+
+                // Don't allow any discount if there are no positions.
+                addDiscountButton.setDisabled(me.positionStore.getCount() <= 0 || discountRecord !== null);
+
+                // Remove discounts if there are no other positions inside the store.
+                if (me.positionStore.getCount() === 1 && discountRecord !== null) {
+                    me.positionStore.remove(discountRecord);
+
+                    Shopware.Notification.createGrowlMessage(me.snippets.growl.discountRemovedTitle, me.snippets.growl.discountRemoved, '', 'growl', false);
+                }
+
+                me.window.setLoading(false);
+            }
+        });
+	},
 
     /**
      * calculates the tax costs for every tax rate and the shipping tax
