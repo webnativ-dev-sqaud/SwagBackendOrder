@@ -17,9 +17,6 @@ class ConfirmationMailRepository
      */
     private $connection;
 
-    /**
-     * @param Connection $connection
-     */
     public function __construct(
         Connection $connection
     ) {
@@ -58,7 +55,7 @@ class ConfirmationMailRepository
             'details.purchaseunit',
             'details.releasedate',
             'details.unitID',
-            'article.laststock',
+            'details.laststock',
             'article.mode as modus',
             'article.main_detail_id as mainDetailId',
             'article.taxID',

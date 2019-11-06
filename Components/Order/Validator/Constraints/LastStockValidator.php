@@ -24,10 +24,6 @@ class LastStockValidator extends ConstraintValidator
      */
     private $connection;
 
-    /**
-     * @param \Enlight_Components_Snippet_Manager $snippetManager
-     * @param Connection                          $connection
-     */
     public function __construct(
         \Enlight_Components_Snippet_Manager $snippetManager,
         Connection $connection
@@ -96,7 +92,7 @@ class LastStockValidator extends ConstraintValidator
     private function isLastStockProduct($orderNumber)
     {
         $builder = $this->connection->createQueryBuilder();
-        $builder->select('article.laststock')
+        $builder->select('details.laststock')
             ->from('s_articles', 'article')
             ->leftJoin('article', 's_articles_details', 'details', 'details.articleID = article.id')
             ->where('ordernumber = :number')

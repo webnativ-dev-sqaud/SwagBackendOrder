@@ -8,12 +8,13 @@
 
 namespace SwagBackendOrder\Tests\Functional\Order;
 
+use PHPUnit\Framework\TestCase;
 use Shopware\Models\Order\Detail;
 use SwagBackendOrder\Components\Order\Factory\DetailFactory;
 use SwagBackendOrder\Components\Order\Struct\PositionStruct;
 use SwagBackendOrder\Components\Order\Validator\InvalidOrderException;
 
-class DetailFactoryTest extends \PHPUnit_Framework_TestCase
+class DetailFactoryTest extends TestCase
 {
     public function test_create_with_discount()
     {
@@ -27,9 +28,10 @@ class DetailFactoryTest extends \PHPUnit_Framework_TestCase
         $positionStruct->setName('Test_Discount');
         $positionStruct->setQuantity(1);
         $positionStruct->setArticleId(0);
+        $positionStruct->setTaxId(1);
 
         $result = $factory->create($positionStruct, true);
-        $this->assertInstanceOf(Detail::class, $result);
+        static::assertInstanceOf(Detail::class, $result);
     }
 
     public function test_create_will_throw_exception_if_no_number_was_provided()

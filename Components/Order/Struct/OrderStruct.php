@@ -41,6 +41,11 @@ class OrderStruct
     private $shippingCostsNet;
 
     /**
+     * @var float
+     */
+    private $shippingCostsTaxRate;
+
+    /**
      * @var int
      */
     private $paymentId;
@@ -74,6 +79,11 @@ class OrderStruct
      * @var bool
      */
     private $netOrder;
+
+    /**
+     * @var bool
+     */
+    private $sendMail;
 
     /**
      * @var PositionStruct[]
@@ -178,6 +188,22 @@ class OrderStruct
     public function setShippingCostsNet($shippingCostsNet)
     {
         $this->shippingCostsNet = $shippingCostsNet;
+    }
+
+    /**
+     * @return float
+     */
+    public function getShippingCostsTaxRate()
+    {
+        return $this->shippingCostsTaxRate;
+    }
+
+    /**
+     * @param float $shippingCostsTaxRate
+     */
+    public function setShippingCostsTaxRate($shippingCostsTaxRate)
+    {
+        $this->shippingCostsTaxRate = $shippingCostsTaxRate;
     }
 
     /**
@@ -293,6 +319,22 @@ class OrderStruct
     }
 
     /**
+     * @return bool
+     */
+    public function getSendMail()
+    {
+        return $this->sendMail;
+    }
+
+    /**
+     * @param bool $sendMail
+     */
+    public function setSendMail($sendMail)
+    {
+        $this->sendMail = $sendMail;
+    }
+
+    /**
      * @return PositionStruct[]
      */
     public function getPositions()
@@ -308,9 +350,6 @@ class OrderStruct
         $this->positions = $positions;
     }
 
-    /**
-     * @param PositionStruct $position
-     */
     public function addPosition(PositionStruct $position)
     {
         $this->positions[] = $position;

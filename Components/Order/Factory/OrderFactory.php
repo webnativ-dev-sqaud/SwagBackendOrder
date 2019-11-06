@@ -48,11 +48,6 @@ class OrderFactory
      */
     private $detailFactory;
 
-    /**
-     * @param ModelManager            $modelManager
-     * @param AddressServiceInterface $addressService
-     * @param DetailFactory           $detailFactory
-     */
     public function __construct(ModelManager $modelManager, AddressServiceInterface $addressService, DetailFactory $detailFactory)
     {
         $this->modelManager = $modelManager;
@@ -61,8 +56,6 @@ class OrderFactory
     }
 
     /**
-     * @param OrderStruct $orderStruct
-     *
      * @return Order
      */
     public function create(OrderStruct $orderStruct)
@@ -89,6 +82,7 @@ class OrderFactory
 
         $order->setInvoiceShippingNet($orderStruct->getShippingCostsNet());
         $order->setInvoiceShipping($orderStruct->getShippingCosts());
+        $order->setInvoiceShippingTaxRate($orderStruct->getShippingCostsTaxRate());
 
         $order->setInvoiceAmount($orderStruct->getTotal());
         $order->setInvoiceAmountNet($orderStruct->getTotalWithoutTax());
@@ -143,7 +137,6 @@ class OrderFactory
     /**
      * Workaround to fix 'Partner can not be null.' exception.
      *
-     * @param OrderStruct $orderStruct
      *
      * @return Order
      */
@@ -157,9 +150,6 @@ class OrderFactory
     }
 
     /**
-     * @param OrderStruct $orderStruct
-     * @param Order       $order
-     *
      * @return Detail[]
      */
     private function createOrderDetails(OrderStruct $orderStruct, Order $order)
@@ -178,8 +168,6 @@ class OrderFactory
     }
 
     /**
-     * @param Order $orderModel
-     *
      * @return PaymentInstance
      */
     private function createPaymentInstance(Order $orderModel)
@@ -224,8 +212,6 @@ class OrderFactory
     }
 
     /**
-     * @param OrderStruct $orderStruct
-     *
      * @return OrderAttributes
      */
     private function createOrderAttributes(OrderStruct $orderStruct)
@@ -244,7 +230,6 @@ class OrderFactory
     }
 
     /**
-     * @param OrderStruct $orderStruct
      * @param $customer
      *
      * @return Shipping
@@ -260,7 +245,6 @@ class OrderFactory
     }
 
     /**
-     * @param OrderStruct $orderStruct
      * @param $customer
      *
      * @return Billing
