@@ -483,6 +483,15 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
             errmsg += me.snippets.error.positions + '<br>';
         }
 
+        // iterates the created positions and adds every record to the positionModel
+        positionsStore.each(
+            function (record) {
+                if (record.data.inStock < record.data.quantity) {
+                    errmsg += 'Artikel ['+record.data.articleNumber+'] kann nicht bestellt werden, weil kein Bestand vorhanden ist.<br>';
+                }
+            }
+        );
+
         if (errmsg.length > 0) {
             me.window.enable(true);
             Shopware.Notification.createGrowlMessage(me.snippets.error.title, errmsg);
@@ -513,13 +522,14 @@ Ext.define('Shopware.apps.SwagBackendOrder.controller.Main', {
          */
         me.orderModel.set('total', me.totalCostsModel.get('total'));
         me.orderModel.set('totalWithoutTax', me.totalCostsModel.get('totalWithoutTax'));
-		
+
         if (hasMany.length > 0) {
             me.recursivePlaceOrder(0, hasMany)
         } else {
             me.recursivePlaceOrder(0, [me.orderModel.get('customerId')])
         }
     },
+
     isValidDate: function (date) {
         var temp = date.split('.');
         if (temp.length === 3)
