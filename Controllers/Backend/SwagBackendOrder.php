@@ -807,19 +807,16 @@ class Shopware_Controllers_Backend_SwagBackendOrder extends Shopware_Controllers
                 $mail->send();
             }
 
-            $data = '';
-        
-            try {
-                $data = Shopware()->Container()->get('dbal_connection')->createQueryBuilder('webnativ_einstellungen')->select(['c.email'])
-                ->from('webnativ_einstellungen', 'c')
-                ->execute()
-                ->fetchAll(\PDO::FETCH_ASSOC);
-
-                if (isset($data[0])) {
-                    $data = $data[0]['email'];
-                }
-            } catch (Exception $ex) {
-            }
+            // Get configuration
+			$shop = false;
+			if ($this->container->initialized('shop')) {
+				$shop = $this->container->get('shop');
+			}
+			if (!$shop) {
+				$shop = $this->container->get('models')->getRepository(\Shopware\Models\Shop\Shop::class)->getActiveDefault();
+			}
+			$config = $this->container->get('shopware.plugin.cached_config_reader')->getByPluginName('SwagBackendOrder', $shop);
+			$data = $config['email'];
 
             if ($data != '') {
                 
