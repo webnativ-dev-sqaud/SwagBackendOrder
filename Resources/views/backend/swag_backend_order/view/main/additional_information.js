@@ -103,7 +103,7 @@ Ext.define('Shopware.apps.SwagBackendOrder.view.main.AdditionalInformation', {
             data : [
                 { "abbr": "Derma", "name": "Derma" },
                 { "abbr": "Neuro", "name": "Neuro" },
-                { "abbr": "Taurus", "name": "Taurus" }
+                { "abbr": "Healthcare", "name": "Healthcare" }
             ]
         });
 
